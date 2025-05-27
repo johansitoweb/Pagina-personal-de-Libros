@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biblioteca Digital</title>
+    <base target="_self">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@preline/preline@2.0.0/dist/preline.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PDF.js para visualización de PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        .book-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        .dark .book-card:hover {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        #pdf-viewer-container {
+            height: calc(100vh - 4rem);
+        }
+        #pdf-viewer {
+            height: 100%;
+            overflow: auto;
+            background-color: #525659;
+        }
+        #pdf-controls {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white dark:bg-gray-800 shadow-sm">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center">
+                    <i class="fas fa-book-open mr-2"></i> Biblioteca Digital
+                </h1>
+                <div class="flex items-center space-x-4">
+                    <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                        <i class="fas fa-moon dark:hidden text-gray-700"></i>
+                        <i class="fas fa-sun hidden dark:block text-yellow-300"></i>
+                    </button>
+                    <button id="upload-btn" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center">
+                        <i class="fas fa-upload mr-2"></i> Subir Libro
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow container mx-auto px-4 py-8" id="main-content">
+            <div class="mb-8 flex justify-between items-center">
+                <h2 class="text-2xl font-semibold text-gray-800 dark:text-white">Mis Libros</h2>
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Buscar libros..." 
+                           class="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                    <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                </div>
+            </div>
+
+            <!-- Books Grid -->
+            <div id="books-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Books will be dynamically inserted here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-12 hidden">
+                <i class="fas fa-book-open text-5xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                <h3 class="text-xl font-medium text-gray-500 dark:text-gray-400">No hay libros aún</h3>
+                <p class="text-gray-400 dark:text-gray-500 mt-2">Sube tu primer libro haciendo clic en el botón "Subir Libro"</p>
+            </div>
+        </main>
+
+        <!-- PDF Viewer (hidden by default) -->
+        <div id="pdf-viewer-container" class="hidden fixed inset-0 z-50 bg-white dark:bg-gray-900">
+            <div id="pdf-controls" class="flex items-center justify-between p-4 bg-gray-800 text-white">
+                <button id="close-pdf" class="flex items-center text-white hover:text-gray-300">
+                    <i class="fas fa-arrow-left mr-2"></i> Volver
+                </button>
+                <div class="flex items-center space-x-4">
+                    <button id="prev-page" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span id="page-num" class="text-sm">Página 1 de 1</span>
+                    <button id="next-page" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <span id="pdf-title" class="font-medium"></span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm">Zoom:</span>
+                    <button id="zoom-out" class="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <button id="zoom-in" class="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button id="download-pdf" class="px-3 py-1 bg-primary-600 rounded hover:bg-primary-700 ml-2">
+                        <i class="fas fa-download mr-1"></i> Descargar
+                    </button>
+                </div>
+            </div>
+            <div id="pdf-viewer" class="w-full">
+                <canvas id="pdf-render"></canvas>
+            </div>
+        </div>
+
+        <!-- Upload Modal -->
+        <div id="upload-modal" class="hs-overlay hidden size-full fixed top-0 start-0 z-[80] overflow-x-hidden overflow-y-auto">
+            <div class="hs-overlay-open:mt-7 hs-overlay-open:opacity-100 hs-overlay-open:duration-500 mt-0 opacity-0 ease-out transition-all sm:max-w-lg sm:w-full m-3 sm:mx-auto">
+                <div class="relative flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+                    <div class="flex justify-between items-center py-3 px-4 border-b dark:border-gray-700">
+                        <h3 class="font-bold text-gray-800 dark:text-white">Subir nuevo libro</h3>
+                        <button type="button" id="close-modal" class="flex justify-center items-center size-7 text-sm font-semibold rounded-full border border-transparent text-gray-800 hover:bg-gray-100 disabled:opacity-50 disabled:pointer-events-none dark:text-white dark:hover:bg-gray-700">
+                            <span class="sr-only">Cerrar</span>
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="p-4 overflow-y-auto">
+                        <form id="upload-form" class="space-y-4">
+                            <div>
+                                <label for="book-title" class="block text-sm font-medium mb-2 dark:text-white">Título del libro</label>
+                                <input type="text" id="book-title" class="py-3 px-4 block w-full border-gray-200 rounded-lg text-sm focus:border-primary-500 focus:ring-primary-500 disabled:opacity-50 disabled:pointer-events-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:focus:ring-gray-600" required>
+                            </div>
+                            <div>
+                                <label for="book-author" class="block text-sm font-medium mb-2 dark:text-white">Autor</label>
+                                <input type="text" id="book-author" class="py-3 px-4 block w-full border-gray-200 rounded-lg text-sm focus:border-primary-500 focus:ring-primary-500 disabled:opacity-50 disabled:pointer-events-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:focus:ring-gray-600" required>
+                            </div>
+                            <div>
+                                <label for="book-description" class="block text-sm font-medium mb-2 dark:text-white">Descripción</label>
+                                <textarea id="book-description" rows="4" class="py-3 px-4 block w-full border-gray-200 rounded-lg text-sm focus:border-primary-500 focus:ring-primary-500 disabled:opacity-50 disabled:pointer-events-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:focus:ring-gray-600"></textarea>
+                            </div>
+                            <div>
+                                <label for="book-cover" class="block text-sm font-medium mb-2 dark:text-white">Portada (opcional)</label>
+                                <input type="file" id="book-cover" accept="image/*" class="block w-full border border-gray-200 shadow-sm rounded-lg text-sm focus:z-10 focus:border-primary-500 focus:ring-primary-500 disabled:opacity-50 disabled:pointer-events-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:focus:outline-none dark:focus:ring-1 dark:focus:ring-gray-600">
+                            </div>
+                            <div>
+                                <label for="book-file" class="block text-sm font-medium mb-2 dark:text-white">Archivo PDF</label>
+                                <input type="file" id="book-file" accept=".pdf" class="block w-full border border-gray-200 shadow-sm rounded-lg text-sm focus:z-10 focus:border-primary-500 focus:ring-primary-500 disabled:opacity-50 disabled:pointer-events-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:focus:outline-none dark:focus:ring-1 dark:focus:ring-gray-600" required>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="flex justify-end items-center gap-x-2 py-3 px-4 border-t dark:border-gray-700">
+                        <button type="button" id="cancel-upload" class="py-2 px-3 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-800 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:hover:bg-gray-700">
+                            Cancelar
+                        </button>
+                        <button type="button" id="submit-upload" class="py-2 px-3 inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:pointer-events-none">
+                            <i class="fas fa-upload mr-1"></i> Subir Libro
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data persistence using localStorage
+        const STORAGE_KEY = 'biblioteca-digital-books';
+        
+        // Sample initial books data
+        const initialBooks = [
+            {
+                id: '1',
+                title: 'El Principito',
+                author: 'Antoine de Saint-Exupéry',
+                description: 'Una historia filosófica para niños y adultos sobre la amistad y el sentido de la vida.',
+                coverUrl: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
+                fileUrl: 'https://www.africau.edu/images/default/sample.pdf', // PDF de ejemplo
+                uploadedAt: new Date().toISOString()
+            },
+            {
+                id: '2',
+                title: 'Cien años de soledad',
+                author: 'Gabriel García Márquez',
+                description: 'La obra maestra del realismo mágico que narra la historia de la familia Buendía en Macondo.',
+                coverUrl: 'https://images.unsplash.com/photo-1589998059171-988d887df646?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
+                fileUrl: 'https://www.africau.edu/images/default/sample.pdf', // PDF de ejemplo
+                uploadedAt: new Date().toISOString()
+            },
+            {
+                id: '3',
+                title: '1984',
+                author: 'George Orwell',
+                description: 'Una distopía clásica sobre vigilancia gubernamental y control del pensamiento.',
+                coverUrl: 'https://images.unsplash.com/photo-1531346878377-a5be20888e57?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
+                fileUrl: 'https://www.africau.edu/images/default/sample.pdf', // PDF de ejemplo
+                uploadedAt: new Date().toISOString()
+            }
+        ];
+
+        // PDF Viewer variables
+        let pdfDoc = null,
+            pageNum = 1,
+            pageRendering = false,
+            pageNumPending = null,
+            scale = 1.0,
+            currentPdfUrl = '';
+
+        // Get books from localStorage or initialize with sample data
+        function getBooks() {
+            const storedBooks = localStorage.getItem(STORAGE_KEY);
+            return storedBooks ? JSON.parse(storedBooks) : initialBooks;
+        }
+
+        // Save books to localStorage
+        function saveBooks(books) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+        }
+
+        // Generate a unique ID
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substring(2);
+        }
+
+        // Render books in the grid
+        function renderBooks(books = getBooks()) {
+            const container = document.getElementById('books-container');
+            const emptyState = document.getElementById('empty-state');
+            
+            container.innerHTML = '';
+            
+            if (books.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            
+            books.forEach((book, index) => {
+                const bookCard = document.createElement('div');
+                bookCard.className = `book-card bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-all duration-300 fade-in`;
+                bookCard.style.animationDelay = `${index * 0.1}s`;
+                
+                bookCard.innerHTML = `
+                    <div class="relative h-48 overflow-hidden">
+                        <img src="${book.coverUrl || 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80'}" 
+                             alt="${book.title}" 
+                             class="w-full h-full object-cover hover:scale-105 transition-transform duration-300">
+                        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                            <h3 class="text-white font-bold text-lg truncate">${book.title}</h3>
+                            <p class="text-white/80 text-sm">${book.author}</p>
+                        </div>
+                    </div>
+                    <div class="p-4">
+                        <p class="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-3">${book.description || 'No hay descripción disponible.'}</p>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">${new Date(book.uploadedAt).toLocaleDateString()}</span>
+                            <button class="view-book px-3 py-1 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-md transition-colors" data-id="${book.id}">
+                                <i class="fas fa-eye mr-1"></i> Ver
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(bookCard);
+            });
+            
+            // Add event listeners to view buttons
+            document.querySelectorAll('.view-book').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const bookId = this.getAttribute('data-id');
+                    viewBook(bookId);
+                });
+            });
+        }
+
+        // View book details and PDF
+        function viewBook(bookId) {
+            const books = getBooks();
+            const book = books.find(b => b.id === bookId);
+            if (!book) return;
+            
+            // Show PDF viewer
+            document.getElementById('main-content').classList.add('hidden');
+            document.getElementById('pdf-viewer-container').classList.remove('hidden');
+            document.getElementById('pdf-title').textContent = `${book.title} - ${book.author}`;
+            
+            // Load the PDF
+            currentPdfUrl = book.fileUrl;
+            loadPdf(book.fileUrl);
+        }
+
+        // PDF Viewer functions
+        function loadPdf(url) {
+            pdfjsLib.getDocument(url).promise.then(function(pdfDoc_) {
+                pdfDoc = pdfDoc_;
+                document.getElementById('page-num').textContent = `Página 1 de ${pdfDoc.numPages}`;
+                
+                // Reset page number and scale
+                pageNum = 1;
+                scale = 1.0;
+                
+                // Render the first page
+                renderPage(pageNum);
+            }).catch(function(error) {
+                alert('Error al cargar el PDF: ' + error.message);
+                closePdfViewer();
+            });
+        }
+
+        function renderPage(num) {
+            pageRendering = true;
+            
+            pdfDoc.getPage(num).then(function(page) {
+                const viewport = page.getViewport({ scale: scale });
+                const canvas = document.getElementById('pdf-render');
+                const context = canvas.getContext('2d');
+                
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                
+                const renderTask = page.render(renderContext);
+                
+                renderTask.promise.then(function() {
+                    pageRendering = false;
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+            });
+            
+            document.getElementById('page-num').textContent = `Página ${num} de ${pdfDoc.numPages}`;
+        }
+
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+
+        function onPrevPage() {
+            if (pageNum <= 1) return;
+            pageNum--;
+            queueRenderPage(pageNum);
+        }
+
+        function onNextPage() {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            queueRenderPage(pageNum);
+        }
+
+        function onZoomIn() {
+            scale += 0.25;
+            queueRenderPage(pageNum);
+        }
+
+        function onZoomOut() {
+            if (scale <= 0.5) return;
+            scale -= 0.25;
+            queueRenderPage(pageNum);
+        }
+
+        function closePdfViewer() {
+            document.getElementById('pdf-viewer-container').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+        }
+
+        function downloadCurrentPdf() {
+            const link = document.createElement('a');
+            link.href = currentPdfUrl;
+            link.download = currentPdfUrl.split('/').pop() || 'documento.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Handle book upload
+        function handleUpload(e) {
+            e.preventDefault();
+            
+            const title = document.getElementById('book-title').value;
+            const author = document.getElementById('book-author').value;
+            const description = document.getElementById('book-description').value;
+            const coverFile = document.getElementById('book-cover').files[0];
+            const pdfFile = document.getElementById('book-file').files[0];
+            
+            if (!title || !author || !pdfFile) {
+                alert('Por favor complete todos los campos requeridos');
+                return;
+            }
+            
+           
+            
+            const newBook = {
+                id: generateId(),
+                title,
+                author,
+                description,
+                coverUrl: coverFile ? URL.createObjectURL(coverFile) : '',
+                fileUrl: URL.createObjectURL(pdfFile),
+                uploadedAt: new Date().toISOString()
+            };
+            
+            const books = getBooks();
+            books.unshift(newBook);
+            saveBooks(books);
+            
+            // Reset form and close modal
+            document.getElementById('upload-form').reset();
+            document.getElementById('upload-modal').classList.add('hidden');
+            
+            // Re-render books
+            renderBooks();
+            
+            alert(`Libro "${title}" subido exitosamente!`);
+        }
+
+        // Search books
+        function searchBooks() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const books = getBooks();
+            
+            if (!searchTerm) {
+                renderBooks(books);
+                return;
+            }
+            
+            const filteredBooks = books.filter(book => 
+                book.title.toLowerCase().includes(searchTerm) || 
+                book.author.toLowerCase().includes(searchTerm) ||
+                (book.description && book.description.toLowerCase().includes(searchTerm))
+            );
+            
+            renderBooks(filteredBooks);
+        }
+
+        // Toggle dark mode
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            html.classList.toggle('dark');
+            localStorage.setItem('darkMode', html.classList.contains('dark'));
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for saved dark mode preference
+            if (localStorage.getItem('darkMode') === 'true' || 
+                (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+            
+            // Render initial books
+            renderBooks();
+            
+            // Event listeners
+            document.getElementById('theme-toggle').addEventListener('click', toggleDarkMode);
+            document.getElementById('upload-btn').addEventListener('click', function() {
+                document.getElementById('upload-modal').classList.remove('hidden');
+            });
+            document.getElementById('close-modal').addEventListener('click', function() {
+                document.getElementById('upload-modal').classList.add('hidden');
+            });
+            document.getElementById('cancel-upload').addEventListener('click', function() {
+                document.getElementById('upload-form').reset();
+                document.getElementById('upload-modal').classList.add('hidden');
+            });
+            document.getElementById('submit-upload').addEventListener('click', handleUpload);
+            document.getElementById('search-input').addEventListener('input', searchBooks);
+            
+            // PDF Viewer controls
+            document.getElementById('close-pdf').addEventListener('click', closePdfViewer);
+            document.getElementById('prev-page').addEventListener('click', onPrevPage);
+            document.getElementById('next-page').addEventListener('click', onNextPage);
+            document.getElementById('zoom-in').addEventListener('click', onZoomIn);
+            document.getElementById('zoom-out').addEventListener('click', onZoomOut);
+            document.getElementById('download-pdf').addEventListener('click', downloadCurrentPdf);
+            
+            // Prevent default anchor behavior
+            document.querySelectorAll('a').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                });
+            });
+        });
+    </script>
+</body>
+</html>
